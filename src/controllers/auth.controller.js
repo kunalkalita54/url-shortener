@@ -5,6 +5,7 @@ import urlModel from "../models/url.model.js";
 import userModel from "../models/user.model.js";
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import validator from 'validator';
 
 export async function register(req,res) {
     const {username, email, password}= req.body;
@@ -88,6 +89,19 @@ export async function shorten_url(req,res) {
 
         if(!long_url) {
             return res.status(400).json({message: 'URL is missing'});
+        }
+
+        const strictUrlOptions = {
+            protocols: ['http', 'https'], // Only allow http and https
+            require_protocol: true,       // Force the URL to start with http:// or https://
+            require_valid_protocol: true, // Double check the protocol is valid
+            validate_length: true         // Ensures long URLs are still checked properly
+        };  
+        
+        const isValid = validator.isURL(long_url, strictUrlOptions);
+
+        if (!isValid) {
+            return res.status(400).json({ message: "Invalid URL format" });
         }
 
         const counter= await counterModel.findOneAndUpdate(
