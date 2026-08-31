@@ -6,6 +6,7 @@ import userModel from "../models/user.model.js";
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import validator from 'validator';
+import { redis } from "../config/redis.js";
 
 export async function register(req,res) {
     const {username, email, password}= req.body;
@@ -136,14 +137,24 @@ export async function shorten_url(req,res) {
 export async function redirect_url(req,res) {
     try {
         let {shortCode}= req.params;
-        
-        const url=await urlModel.findOne({shortCode});
 
-        if(!url) {
-            return res.status(404).json({message: 'URL not found'});
+        const cachedURL= await redis.get(shortCode);
+
+        if(cachedURL) {
+            console.log("CACHE HIT for", shortCode);
+            return res.redirect(302, cachedURL);
         }
 
-        return res.redirect(302, url.longURL);
+        console.log("CACHE MISS for", shortCode);
+        const dbURL= await urlModel.findOne({shortCode});
+        
+        if(!dbURL) {
+            return res.status(404).json({message: 'Short URL not found'});
+        }
+
+        await redis.set(shortCode, dbURL.longURL, {'EX': 120});
+
+        return res.redirect(302, dbURL.longURL);
 
     } catch (error) {
         console.log(error);
