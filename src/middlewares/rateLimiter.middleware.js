@@ -1,4 +1,4 @@
-import { redis } from "../config/redis.js";
+import { redisConnection } from "../config/redis.js";
 
 export async function rateLimiter(req,res,next) {
     const ip= req.ip;
@@ -11,14 +11,14 @@ export async function rateLimiter(req,res,next) {
     const key= `rate_limit: sliding: ${ip}`;
 
     try {
-        const results= await redis
+        const results= await redisConnection
         .multi()
 
-        .zRemRangeByScore(key, 0, windowStart)
+        .zremrangebyscore(key, 0, windowStart)
 
-        .zAdd(key, {score: now, value: `${now}:${Math.random()}`})
+        .zadd(key, now, `${now}:${Math.random()}`)
 
-        .zCard(key)
+        .zcard(key)
 
         .expire(key, windowSecs)
         .exec();

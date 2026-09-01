@@ -1,4 +1,5 @@
 import config from "../config/config.js";
+import { addClickEvent } from '../queue.js';
 import { toBase62 } from "../utils/base62.util.js";
 import counterModel from "../models/counter.model.js";
 import urlModel from "../models/url.model.js";
@@ -6,7 +7,7 @@ import userModel from "../models/user.model.js";
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import validator from 'validator';
-import { redis } from "../config/redis.js";
+import { redisConnection } from "../config/redis.js";
 
 export async function register(req,res) {
     const {username, email, password}= req.body;
@@ -138,11 +139,18 @@ export async function redirect_url(req,res) {
     try {
         let {shortCode}= req.params;
 
-        const cachedURL= await redis.get(shortCode);
+        const cachedURL= await redisConnection.get(shortCode);
 
         if(cachedURL) {
             console.log("CACHE HIT for", shortCode);
-            return res.redirect(302, cachedURL);
+            res.redirect(302, cachedURL);
+            addClickEvent({
+              shortCode,
+              timestamp: Date.now(),
+              ip: req.ip,
+              userAgent: req.headers['user-agent'],
+            });
+            return;
         }
 
         console.log("CACHE MISS for", shortCode);
@@ -152,9 +160,15 @@ export async function redirect_url(req,res) {
             return res.status(404).json({message: 'Short URL not found'});
         }
 
-        await redis.set(shortCode, dbURL.longURL, {'EX': 120});
+        await redisConnection.set(shortCode, dbURL.longURL, 'EX', 120);
 
-        return res.redirect(302, dbURL.longURL);
+        res.redirect(302, dbURL.longURL);
+        addClickEvent({
+            shortCode,
+            timestamp: Date.now(),
+            ip: req.ip,
+            userAgent: req.headers['user-agent'],
+        });
 
     } catch (error) {
         console.log(error);
