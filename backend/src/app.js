@@ -3,6 +3,9 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 
+import authRouter from './routes/auth.routes.js';
+import redirectRouter from './routes/redirect.routes.js';
+
 const app = express();
 
 const allowedOrigins = [
