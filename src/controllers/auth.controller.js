@@ -88,19 +88,25 @@ export async function login(req,res) {
 export async function shorten_url(req,res) {
     try {
         const {long_url}= req.body;
+   
+        const trimmed_url = long_url?.trim();
 
-        if(!long_url) {
-            return res.status(400).json({message: 'URL is missing'});
+        if (!trimmed_url) {
+          return res.status(400).json({ message: 'URL is missing' });
+        }
+
+        if (trimmed_url.length > 2048) {
+          return res.status(400).json({ message: 'URL exceeds maximum allowed length (2048 characters)' });
         }
 
         const strictUrlOptions = {
-            protocols: ['http', 'https'], // Only allow http and https
-            require_protocol: true,       // Force the URL to start with http:// or https://
-            require_valid_protocol: true, // Double check the protocol is valid
-            validate_length: true         // Ensures long URLs are still checked properly
+            protocols: ['http', 'https'], 
+            require_protocol: true,       
+            require_valid_protocol: true, 
+            validate_length: true         
         };  
         
-        const isValid = validator.isURL(long_url, strictUrlOptions);
+        const isValid = validator.isURL(trimmed_url, strictUrlOptions);
 
         if (!isValid) {
             return res.status(400).json({ message: "Invalid URL format" });
@@ -116,7 +122,7 @@ export async function shorten_url(req,res) {
 
         const url= await urlModel.create({
             shortCode: shortened,
-            longURL: long_url,
+            longURL: trimmed_url,
             user: req.user.id
         })
 
@@ -135,43 +141,75 @@ export async function shorten_url(req,res) {
     }
 }
 
-export async function redirect_url(req,res) {
-    try {
-        let {shortCode}= req.params;
+export async function redirect_url(req, res) {
+  try {
+    const { shortCode } = req.params;
 
-        const cachedURL= await redisConnection.get(shortCode);
 
-        if(cachedURL) {
-            console.log("CACHE HIT for", shortCode);
-            res.redirect(302, cachedURL);
-            addClickEvent({
-              shortCode,
-              timestamp: Date.now(),
-              ip: req.ip,
-              userAgent: req.headers['user-agent'],
-            });
-            return;
-        }
+    const cachedURL = await redisConnection.get(shortCode);
 
-        console.log("CACHE MISS for", shortCode);
-        const dbURL= await urlModel.findOne({shortCode});
-        
-        if(!dbURL) {
-            return res.status(404).json({message: 'Short URL not found'});
-        }
+    if (cachedURL) {
+      console.log("CACHE HIT for", shortCode);
+      res.redirect(302, cachedURL);
+      addClickEvent({
+        shortCode,
+        timestamp: Date.now(),
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+      return;
+    }
 
-        await redisConnection.set(shortCode, dbURL.longURL, 'EX', 120);
+    console.log("CACHE MISS for", shortCode);
 
-        res.redirect(302, dbURL.longURL);
-        addClickEvent({
+    
+    const lockKey = `lock:${shortCode}`;
+    const gotLock = await redisConnection.set(lockKey, '1', 'NX', 'PX', 5000);
+
+    if (!gotLock) {
+      
+      for (let i = 0; i < 20; i++) {           
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        const retryURL = await redisConnection.get(shortCode);
+        if (retryURL) {
+          res.redirect(302, retryURL);
+          addClickEvent({
             shortCode,
             timestamp: Date.now(),
             ip: req.ip,
             userAgent: req.headers['user-agent'],
-        });
-
-    } catch (error) {
-        console.log(error);
-        return res.status(500).json({message: 'Something went wrong'});
+          });
+          return;
+        }
+      }
+     
     }
+
+    
+    try {
+      const dbURL = await urlModel.findOne({ shortCode });
+
+      if (!dbURL) {
+        return res.status(404).json({ message: 'Short URL not found' });
+      }
+
+      await redisConnection.set(shortCode, dbURL.longURL, 'EX', 120);
+      res.redirect(302, dbURL.longURL);
+      addClickEvent({
+        shortCode,
+        timestamp: Date.now(),
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+    } finally {
+      
+      if (gotLock) {
+        await redisConnection.del(lockKey);
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 }

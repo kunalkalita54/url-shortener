@@ -1,4 +1,5 @@
 import { Router } from "express";
+import * as analyticsController from '../controllers/analytics.controller.js';
 import * as authController from '../controllers/auth.controller.js';
 import * as authMiddleware from '../middlewares/auth.middleware.js';
 
@@ -14,6 +15,6 @@ authRouter.post('/login', authController.login);
 authRouter.post('/shorten_url', authMiddleware.verifyToken, authController.shorten_url);
 
 
-
+authRouter.get('/getUrlAnalytics/:shortCode', authMiddleware.verifyToken, analyticsController.getUrlAnalytics);
 
 export default authRouter;

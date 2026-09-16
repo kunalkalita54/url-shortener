@@ -8,7 +8,7 @@ export async function rateLimiter(req,res,next) {
     const now= Math.floor(Date.now()/1000);
     const windowStart= now-windowSecs;
 
-    const key= `rate_limit: sliding: ${ip}`;
+    const key= `rate_limit:sliding:${ip}`;
 
     try {
         const results= await redisConnection

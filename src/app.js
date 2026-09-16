@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser';
 import authRouter from './routes/auth.routes.js';
 import redirectRouter from './routes/redirect.routes.js';
 
-import { addClickEvent } from './queue.js';
+
 
 const app=express();
 
