@@ -179,6 +179,7 @@ export async function redirect_url(req, res) {
             timestamp: Date.now(),
             ip: req.ip,
             userAgent: req.headers['user-agent'],
+            referrer: req.headers['referer'] || null,
           });
           return;
         }
@@ -201,6 +202,7 @@ export async function redirect_url(req, res) {
         timestamp: Date.now(),
         ip: req.ip,
         userAgent: req.headers['user-agent'],
+        referrer: req.headers['referer'] || null,
       });
     } finally {
       

@@ -5,7 +5,7 @@ export async function getUrlAnalytics (req, res) {
   try {
     const { shortCode } = req.params;
 
-    const url = await Url.findOne({ shortCode, owner: req.user._id });
+    const url = await Url.findOne({ shortCode, user: req.user.id });
     if (!url) {
       return res.status(404).json({ message: 'URL not found' });
     }
