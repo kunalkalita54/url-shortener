@@ -1,5 +1,6 @@
 import config from "../config/config.js";
-import { addClickEvent } from '../queue.js';
+import Click from '../models/click.model.js';
+import { UAParser } from 'ua-parser-js';
 import { toBase62 } from "../utils/base62.util.js";
 import counterModel from "../models/counter.model.js";
 import urlModel from "../models/url.model.js";
@@ -8,6 +9,29 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import validator from 'validator';
 import { redisConnection } from "../config/redis.js";
+
+async function recordClick(req, shortCode) {
+  try {
+    const parser = new UAParser(req.headers['user-agent'] || '');
+
+    const device = parser.getDevice().type || 'desktop';
+    const browser = parser.getBrowser().name || 'Unknown';
+
+    await Click.create({
+      shortCode,
+      timestamp: new Date(),
+      ip: req.ip,
+      userAgent: req.headers['user-agent'] || '',
+      device,
+      browser,
+      referrer: req.headers['referer'] || null,
+    });
+
+    console.log(`Saved click for ${shortCode}`);
+  } catch (error) {
+    console.error(`Failed to record click for ${shortCode}:`, error);
+  }
+}
 
 export async function register(req,res) {
     const {username, email, password}= req.body;
@@ -152,13 +176,7 @@ export async function redirect_url(req, res) {
     if (cachedURL) {
       console.log("CACHE HIT for", shortCode);
       res.redirect(302, cachedURL);
-      addClickEvent({
-        shortCode,
-        timestamp: Date.now(),
-        ip: req.ip,
-        userAgent: req.headers['user-agent'],
-        referrer: req.headers['referer'] || null,
-      });
+      await recordClick(req, shortCode);
       return;
     }
 
@@ -176,13 +194,7 @@ export async function redirect_url(req, res) {
         const retryURL = await redisConnection.get(shortCode);
         if (retryURL) {
           res.redirect(302, retryURL);
-          addClickEvent({
-            shortCode,
-            timestamp: Date.now(),
-            ip: req.ip,
-            userAgent: req.headers['user-agent'],
-            referrer: req.headers['referer'] || null,
-          });
+          await recordClick(req, shortCode);
           return;
         }
       }
@@ -199,13 +211,7 @@ export async function redirect_url(req, res) {
 
       await redisConnection.set(shortCode, dbURL.longURL, 'EX', 120);
       res.redirect(302, dbURL.longURL);
-      addClickEvent({
-        shortCode,
-        timestamp: Date.now(),
-        ip: req.ip,
-        userAgent: req.headers['user-agent'],
-        referrer: req.headers['referer'] || null,
-      });
+      await recordClick(req, shortCode);
     } finally {
       
       if (gotLock) {
