@@ -1,21 +1,29 @@
 import 'dotenv/config';
-import cors from 'cors';
 import express from 'express';
 import cookieParser from 'cookie-parser';
-import authRouter from './routes/auth.routes.js';
-import redirectRouter from './routes/redirect.routes.js';
+import cors from 'cors';
 
+const app = express();
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://url-shortener-indol-nine-24.vercel.app'
+];
 
-const app=express();
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS blocked origin: ${origin}`));
+    }
+  },
+  credentials: true
+}));
 
 app.use(express.json());
 app.use(cookieParser());
 
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true
-}));
 
 app.use('/api/url', authRouter);
 
